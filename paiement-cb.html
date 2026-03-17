@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paiement Sécurisé — CB</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cb-navy: #0D1B2A;
+      --cb-blue: #1250AA;
+      --cb-mid: #1A3A6B;
+      --cb-gold: #C9A84C;
+      --cb-silver: #B8C4D6;
+      --cb-white: #F7F9FC;
+      --cb-success: #1E8C5E;
+      --cb-error: #C0392B;
+      --card-w: 420px;
+      --card-h: 260px;
+      --radius: 16px;
+    }
+    body {
+      font-family: 'Instrument Sans', sans-serif;
+      background: var(--cb-navy);
+      color: var(--cb-white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 24px 60px;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 80%, rgba(18,80,170,0.2) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 20%, rgba(201,168,76,0.07) 0%, transparent 50%);
+      pointer-events: none; z-index: 0;
+    }
+    .outer-layout {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 1060px;
+      display: grid;
+      grid-template-columns: 1fr 480px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    /* ── Panels ── */
+    .left-panel  { display:flex; flex-direction:column; gap:16px; animation:fadeLeft  0.7s 0.2s ease both; padding-top:8px; }
+    .right-panel { display:flex; flex-direction:column; gap:16px; animation:fadeRight 0.7s 0.2s ease both; padding-top:8px; }
+    .panel-card  { background:rgba(255,255,255,0.03); border:1px solid rgba(184,196,214,0.1); border-radius:14px; padding:18px 20px; backdrop-filter:blur(8px); }
+    .panel-title { font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--cb-gold); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+    .panel-title::before { content:''; display:block; width:3px; height:10px; background:var(--cb-gold); border-radius:2px; }
+    /* ── Protocol flow ── */
+    .flow-diagram { display:flex; flex-direction:column; gap:0; }
+    .flow-step { display:flex; align-items:flex-start; gap:10px; position:relative; }
+    .flow-step:not(:last-child)::after { content:''; position:absolute; left:11px; top:24px; bottom:-8px; width:1px; background:rgba(184,196,214,0.15); }
+    .flow-dot { width:22px; height:22px; border-radius:50%; border:1.5px solid rgba(184,196,214,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; font-family:'DM Mono',monospace; font-size:0.55rem; color:rgba(184,196,214,0.5); transition:all 0.3s; }
+    .flow-dot.active { border-color:var(--cb-gold); background:rgba(201,168,76,0.15); color:var(--cb-gold); }
+    .flow-dot.done   { border-color:var(--cb-success); background:rgba(30,140,94,0.15); color:var(--cb-success); }
+    .flow-content { padding-bottom:14px; flex:1; }
+    .flow-label  { font-family:'DM Mono',monospace; font-size:0.68rem; color:rgba(184,196,214,0.7); margin-bottom:2px; }
+    .flow-label.active { color:var(--cb-white); }
+    .flow-label.done   { color:rgba(184,196,214,0.5); }
+    .flow-msg { font-family:'DM Mono',monospace; font-size:0.6rem; color:rgba(184,196,214,0.35); letter-spacing:0.06em; }
+    .flow-msg.active { color:var(--cb-gold); }
+    .flow-msg.done   { color:var(--cb-success); opacity:0.7; }
+    /* ── Bitmap ── */
+    .bitmap-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:3px; margin-top:4px; }
+    .bbit { aspect-ratio:1; border-radius:3px; background:rgba(184,196,214,0.08); border:1px solid rgba(184,196,214,0.1); display:flex; align-items:center; justify-content:center; font-family:'DM Mono',monospace; font-size:0.45rem; color:rgba(184,196,214,0.25); transition:all 0.25s; }
+    .bbit.on { background:rgba(18,80,170,0.35); border-color:rgba(18,80,170,0.6); color:rgba(140,180,255,0.9); }
+    .bitmap-legend { margin-top:8px; font-size:0.55rem; color:rgba(184,196,214,0.4); font-family:'DM Mono',monospace; }
+    .bitmap-legend span { color:rgba(140,180,255,0.7); }
+    /* ── ITM ── */
+    .itm-display { display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(18,80,170,0.12); border:1px solid rgba(18,80,170,0.3); border-radius:8px; margin-bottom:8px; }
+    .itm-label { font-family:'DM Mono',monospace; font-size:0.6rem; color:rgba(184,196,214,0.5); letter-spacing:0.08em; }
+    .itm-value { font-family:'DM Mono',monospace; font-size:1rem; color:#5b9cff; letter-spacing:0.12em; font-weight:500; }
+    .itm-desc  { font-size:0.63rem; color:rgba(184,196,214,0.6); margin-left:auto; text-align:right; }
+    /* ── Field map ── */
+    .field-map { display:flex; flex-direction:column; gap:0; }
+    .fmap-row { display:grid; grid-template-columns:52px 1fr auto; gap:8px; align-items:baseline; padding:6px 0; border-bottom:1px solid rgba(184,196,214,0.06); }
+    .fmap-row:last-child { border-bottom:none; }
+    .fmap-id   { font-family:'DM Mono',monospace; font-size:0.62rem; color:var(--cb-gold); letter-spacing:0.06em; }
+    .fmap-name { font-size:0.67rem; color:rgba(184,196,214,0.7); }
+    .fmap-val  { font-family:'DM Mono',monospace; font-size:0.6rem; color:rgba(184,196,214,0.4); text-align:right; white-space:nowrap; }
+    .fmap-val.live { color:var(--cb-white); }
+    /* ── Response codes ── */
+    .rc-table { width:100%; }
+    .rc-row { display:grid; grid-template-columns:28px 1fr; gap:8px; padding:5px 0; border-bottom:1px solid rgba(184,196,214,0.06); align-items:center; }
+    .rc-row:last-child { border-bottom:none; }
+    .rc-code { font-family:'DM Mono',monospace; font-size:0.65rem; font-weight:500; text-align:center; padding:2px 4px; border-radius:4px; }
+    .rc-code.ok  { background:rgba(30,140,94,0.2);  color:#2ecc8a; }
+    .rc-code.err { background:rgba(192,57,43,0.2);  color:#e74c3c; }
+    .rc-code.ref { background:rgba(201,168,76,0.15);color:var(--cb-gold); }
+    .rc-desc { font-size:0.65rem; color:rgba(184,196,214,0.65); }
+    /* ── Compliance ── */
+    .compliance-list { display:flex; flex-direction:column; gap:8px; }
+    .comp-item { display:flex; align-items:center; gap:10px; padding:8px 10px; background:rgba(255,255,255,0.02); border-radius:8px; border:1px solid rgba(184,196,214,0.07); }
+    .comp-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .comp-icon.green { background:rgba(30,140,94,0.2);  color:#2ecc8a; }
+    .comp-icon.blue  { background:rgba(18,80,170,0.25); color:#5b9cff; }
+    .comp-icon.gold  { background:rgba(201,168,76,0.2); color:var(--cb-gold); }
+    .comp-text { flex:1; }
+    .comp-title { font-size:0.72rem; font-weight:600; color:var(--cb-white); }
+    .comp-sub   { font-size:0.6rem; color:rgba(184,196,214,0.5); margin-top:1px; }
+    .comp-check { font-size:0.7rem; color:var(--cb-success); font-family:'DM Mono',monospace; }
+    /* ═══ Center ═══ */
+    .center-col { display:flex; flex-direction:column; align-items:center; gap:22px; animation:fadeUp 0.7s 0.1s ease both; }
+    .header { text-align:center; }
+    .header .merchant { font-family:'DM Serif Display',serif; font-size:1.05rem; color:var(--cb-silver); letter-spacing:0.04em; margin-bottom:4px; }
+    .header .amount   { font-family:'DM Serif Display',serif; font-size:3rem; color:var(--cb-white); line-height:1; }
+    .header .amount sup { font-size:1.4rem; vertical-align:super; }
+    .header .desc { font-size:0.75rem; color:var(--cb-silver); margin-top:6px; letter-spacing:0.05em; text-transform:uppercase; }
+    /* ── Card ── */
+    .card-scene { width:var(--card-w); height:var(--card-h); perspective:1200px; }
+    .card { width:100%; height:100%; position:relative; transform-style:preserve-3d; transition:transform 0.7s cubic-bezier(0.4,0,0.2,1); cursor:pointer; }
+    .card.flipped { transform:rotateY(180deg); }
+    .card-face { position:absolute; inset:0; border-radius:var(--radius); backface-visibility:hidden; -webkit-backface-visibility:hidden; overflow:hidden; }
+    .card-front { background:linear-gradient(135deg,var(--cb-mid) 0%,#0D2555 60%,var(--cb-navy) 100%); border:1px solid rgba(184,196,214,0.2); box-shadow:0 24px 60px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset; padding:28px 32px; display:flex; flex-direction:column; justify-content:space-between; }
+    .card-front::before { content:''; position:absolute; top:-40px; right:-40px; width:220px; height:220px; border-radius:50%; background:radial-gradient(circle,rgba(201,168,76,0.12),transparent 70%); pointer-events:none; }
+    .card-top { display:flex; justify-content:space-between; align-items:flex-start; }
+    .chip { width:42px; height:32px; background:linear-gradient(135deg,#c8aa5a,#f0d080,#a87b30,#e5c060); border-radius:5px; position:relative; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+    .chip::after { content:''; position:absolute; inset:4px; border:1px solid rgba(0,0,0,0.25); border-radius:2px; }
+    .chip-lines { position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; padding:4px; gap:2px; opacity:0.5; }
+    .chip-lines span { background:rgba(0,0,0,0.3); border-radius:1px; }
+    .card-logo { font-family:'DM Serif Display',serif; font-size:1.8rem; color:var(--cb-white); letter-spacing:0.02em; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+    .card-logo span { color:var(--cb-gold); }
+    .card-number { font-family:'DM Mono',monospace; font-size:1.25rem; letter-spacing:0.18em; color:rgba(255,255,255,0.9); text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+    .card-bottom { display:flex; justify-content:space-between; align-items:flex-end; }
+    .card-holder-block { display:flex; flex-direction:column; gap:2px; }
+    .card-label { font-size:0.6rem; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.45); }
+    .card-value { font-family:'DM Mono',monospace; font-size:0.85rem; color:rgba(255,255,255,0.9); letter-spacing:0.06em; text-transform:uppercase; }
+    .cb-badge { display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
+    .cb-circles { display:flex; }
+    .cb-c1,.cb-c2 { width:28px; height:28px; border-radius:50%; }
+    .cb-c1 { background:#e8192c; margin-right:-10px; position:relative; z-index:1; }
+    .cb-c2 { background:#f4c430; opacity:0.9; }
+    .cb-text { font-family:'DM Mono',monospace; font-size:0.5rem; color:rgba(255,255,255,0.5); letter-spacing:0.08em; }
+    .card-back { background:linear-gradient(135deg,#111922,#0D2555); border:1px solid rgba(184,196,214,0.15); box-shadow:0 24px 60px rgba(0,0,0,0.6); transform:rotateY(180deg); display:flex; flex-direction:column; justify-content:space-between; padding:20px 0 28px; }
+    .magstrip { width:100%; height:44px; background:linear-gradient(to bottom,#1a1a1a,#333,#1a1a1a); margin-top:10px; }
+    .back-sig-row { display:flex; align-items:center; gap:12px; padding:0 32px; }
+    .sig-band { flex:1; height:38px; background:repeating-linear-gradient(-45deg,#e8e8e8,#e8e8e8 4px,#f5f5f5 4px,#f5f5f5 8px); border-radius:4px; display:flex; align-items:center; justify-content:flex-end; padding-right:12px; }
+    .cvv-box { background:white; color:#111; font-family:'DM Mono',monospace; font-size:0.9rem; padding:4px 8px; border-radius:3px; letter-spacing:0.15em; font-weight:500; }
+    .back-info { padding:0 32px; font-size:0.62rem; color:rgba(255,255,255,0.3); line-height:1.6; letter-spacing:0.03em; }
+    /* ── Form ── */
+    .payment-form { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(184,196,214,0.12); border-radius:20px; padding:28px; backdrop-filter:blur(12px); }
+    .form-title { font-family:'DM Serif Display',serif; font-size:0.9rem; color:var(--cb-silver); margin-bottom:20px; text-transform:uppercase; letter-spacing:0.08em; display:flex; align-items:center; gap:10px; }
+    .form-title::before { content:''; display:inline-block; width:20px; height:1px; background:var(--cb-gold); }
+    .field-group { display:flex; flex-direction:column; gap:14px; }
+    .field { display:flex; flex-direction:column; gap:5px; }
+    .field label { font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--cb-silver); font-weight:500; }
+    .field input { background:rgba(255,255,255,0.05); border:1px solid rgba(184,196,214,0.2); border-radius:10px; padding:13px 16px; font-family:'DM Mono',monospace; font-size:0.95rem; color:var(--cb-white); outline:none; transition:border-color 0.2s,background 0.2s,box-shadow 0.2s; letter-spacing:0.08em; width:100%; }
+    .field input::placeholder { color:rgba(184,196,214,0.3); letter-spacing:0.05em; }
+    .field input:focus { border-color:var(--cb-gold); background:rgba(201,168,76,0.06); box-shadow:0 0 0 3px rgba(201,168,76,0.12); }
+    .field input.error { border-color:var(--cb-error); background:rgba(192,57,43,0.06); }
+    .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .field-error { font-size:0.63rem; color:var(--cb-error); margin-top:2px; display:none; }
+    .field-error.visible { display:block; }
+    .cvv-field { position:relative; }
+    .cvv-icon { position:absolute; right:14px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--cb-silver); font-size:0.75rem; opacity:0.6; transition:opacity 0.2s; }
+    .cvv-icon:hover { opacity:1; color:var(--cb-gold); }
+    .separator { height:1px; background:rgba(184,196,214,0.1); }
+    .submit-btn { width:100%; padding:17px; border:none; border-radius:12px; background:linear-gradient(135deg,var(--cb-blue),#0E3D8A); color:white; font-family:'Instrument Sans',sans-serif; font-size:1rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; position:relative; overflow:hidden; transition:transform 0.15s,box-shadow 0.2s; box-shadow:0 8px 32px rgba(18,80,170,0.4); }
+    .submit-btn::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,0.12),transparent); opacity:0; transition:opacity 0.2s; }
+    .submit-btn:hover::before { opacity:1; }
+    .submit-btn:hover { transform:translateY(-1px); box-shadow:0 12px 40px rgba(18,80,170,0.5); }
+    .submit-btn:active { transform:translateY(0); }
+    .submit-btn.loading { pointer-events:none; background:var(--cb-mid); }
+    .btn-text { transition:opacity 0.2s; }
+    .btn-spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:22px; height:22px; border:2px solid rgba(255,255,255,0.2); border-top-color:white; border-radius:50%; animation:spin 0.8s linear infinite; opacity:0; transition:opacity 0.2s; }
+    .submit-btn.loading .btn-text { opacity:0; }
+    .submit-btn.loading .btn-spinner { opacity:1; }
+    .security-row { display:flex; justify-content:center; align-items:center; gap:20px; }
+    .badge { display:flex; align-items:center; gap:6px; font-size:0.62rem; color:rgba(184,196,214,0.45); letter-spacing:0.06em; text-transform:uppercase; }
+    .badge-icon { width:13px; height:13px; opacity:0.45; }
+    .iso-strip { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+    .iso-tag { font-family:'DM Mono',monospace; font-size:0.58rem; color:rgba(184,196,214,0.4); border:1px solid rgba(184,196,214,0.12); border-radius:4px; padding:3px 7px; letter-spacing:0.06em; }
+    /* ── Success ── */
+    .success-overlay { position:fixed; inset:0; background:rgba(13,27,42,0.96); display:flex; align-items:center; justify-content:center; z-index:100; opacity:0; pointer-events:none; transition:opacity 0.4s; backdrop-filter:blur(10px); }
+    .success-overlay.visible { opacity:1; pointer-events:all; }
+    .success-card { text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; max-width:420px; width:100%; padding:0 24px; transform:scale(0.9); transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    .success-overlay.visible .success-card { transform:scale(1); }
+    .success-circle { width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,var(--cb-success),#15634a); display:flex; align-items:center; justify-content:center; animation:pulse-success 2s infinite; }
+    .checkmark { width:32px; height:32px; stroke:white; stroke-width:3; fill:none; stroke-dasharray:50; stroke-dashoffset:50; transition:stroke-dashoffset 0.6s 0.3s ease; }
+    .success-overlay.visible .checkmark { stroke-dashoffset:0; }
+    .success-title { font-family:'DM Serif Display',serif; font-size:1.8rem; color:var(--cb-white); }
+    .success-sub   { font-size:0.85rem; color:var(--cb-silver); line-height:1.6; }
+    .success-ref   { font-family:'DM Mono',monospace; font-size:0.75rem; color:var(--cb-gold); letter-spacing:0.12em; background:rgba(201,168,76,0.1); padding:8px 16px; border-radius:6px; border:1px solid rgba(201,168,76,0.2); }
+    .success-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; text-align:left; }
+    .sf-item { background:rgba(255,255,255,0.04); border-radius:8px; padding:8px 12px; border:1px solid rgba(184,196,214,0.08); }
+    .sf-key { font-family:'DM Mono',monospace; font-size:0.58rem; color:rgba(184,196,214,0.45); letter-spacing:0.08em; margin-bottom:2px; }
+    .sf-val { font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--cb-white); }
+    /* ── Animations ── */
+    @keyframes fadeDown  { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:none} }
+    @keyframes fadeUp    { from{opacity:0;transform:translateY(20px)}  to{opacity:1;transform:none} }
+    @keyframes fadeLeft  { from{opacity:0;transform:translateX(-24px)} to{opacity:1;transform:none} }
+    @keyframes fadeRight { from{opacity:0;transform:translateX(24px)}  to{opacity:1;transform:none} }
+    @keyframes spin { to{transform:translate(-50%,-50%) rotate(360deg)} }
+    @keyframes pulse-success { 0%,100%{box-shadow:0 0 0 0 rgba(30,140,94,0.4)} 50%{box-shadow:0 0 0 20px rgba(30,140,94,0)} }
+    @media(max-width:920px) { .outer-layout{grid-template-columns:1fr;max-width:520px} .left-panel,.right-panel{display:none} }
+    @media(max-width:460px) { :root{--card-w:340px;--card-h:210px} .card-number{font-size:1rem} .card-front{padding:20px 22px} .payment-form{padding:20px 16px} }
+  </style>
+</head>
+<body>
+
+<div class="outer-layout">
+
+  <!-- ═══ LEFT PANEL ═══ -->
+  <div class="left-panel">
+
+    <div class="panel-card">
+      <div class="panel-title">Flux CBAE 4.12</div>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-dot" id="fd0">1</div>
+          <div class="flow-content">
+            <div class="flow-label" id="fl0">Collecte données porteur</div>
+            <div class="flow-msg"  id="fm0">Champ 2 (PAN) · 14 · 35 (Track 2)</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot" id="fd1">2</div>
+          <div class="flow-content">
+            <div class="flow-label" id="fl1">Demande d'autorisation</div>
+            <div class="flow-msg"  id="fm1">ITM 0100 → Réseau CB</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot" id="fd2">3</div>
+          <div class="flow-content">
+            <div class="flow-label" id="fl2">Routage vers l'émetteur</div>
+            <div class="flow-msg"  id="fm2">Réseau → Serveur émetteur</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot" id="fd3">4</div>
+          <div class="flow-content">
+            <div class="flow-label" id="fl3">Réponse autorisation</div>
+            <div class="flow-msg"  id="fm3">ITM 0110 ← Champ 39 (code réponse)</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot" id="fd4">5</div>
+          <div class="flow-content" style="padding-bottom:0">
+            <div class="flow-label" id="fl4">Avis de confirmation</div>
+            <div class="flow-msg"  id="fm4">ITM 0120 → Avis final acquéreur</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Bitmap ISO 8583 (Primary · 64 bits)</div>
+      <div class="bitmap-grid" id="bitmapGrid"></div>
+      <div class="bitmap-legend">Bits actifs : <span id="activeBits">0</span> / 64</div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Identifiant de Message (ITM)</div>
+      <div class="itm-display">
+        <div>
+          <div class="itm-label">TYPE</div>
+          <div class="itm-value" id="itmValue">—</div>
+        </div>
+        <div class="itm-desc" id="itmDesc">En attente de saisie</div>
+      </div>
+      <div style="font-size:0.62rem;color:rgba(184,196,214,0.35);font-family:'DM Mono',monospace;line-height:1.7;">
+        Format: numérique DCB · 4 octets<br>
+        APDU max: 1 024 octets<br>
+        Base: ISO 8583 · CBAE 4.12
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ CENTER ═══ -->
+  <div class="center-col">
+
+    <div class="header">
+      <div class="merchant">Boutique Exemple</div>
+      <div class="amount"><sup>€</sup>89<span style="font-size:1.8rem">,00</span></div>
+      <div class="desc">Commande #2024-8842 · Paiement sécurisé</div>
+    </div>
+
+    <div class="card-scene">
+      <div class="card" id="card">
+        <div class="card-face card-front">
+          <div class="card-top">
+            <div class="chip"><div class="chip-lines"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
+            <div class="card-logo">C<span>B</span></div>
+          </div>
+          <div class="card-number" id="cardNumberDisplay">•••• •••• •••• ••••</div>
+          <div class="card-bottom">
+            <div class="card-holder-block">
+              <span class="card-label">Titulaire</span>
+              <span class="card-value" id="cardHolderDisplay">PRÉNOM NOM</span>
+            </div>
+            <div class="card-holder-block" style="align-items:center">
+              <span class="card-label">Expire</span>
+              <span class="card-value" id="cardExpiryDisplay">MM/AA</span>
+            </div>
+            <div class="cb-badge">
+              <div class="cb-circles"><div class="cb-c1"></div><div class="cb-c2"></div></div>
+              <span class="cb-text">CARTES BANCAIRES</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-face card-back">
+          <div class="magstrip"></div>
+          <div class="back-sig-row">
+            <div class="sig-band"><div class="cvv-box" id="cvvDisplay">•••</div></div>
+          </div>
+          <div class="back-info">
+            Carte émise conformément aux règles du Groupement Cartes Bancaires CB.<br>
+            CBAE v4.12 · ISO 8583 · EMV Chip &amp; PIN · PCI-DSS L1
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="payment-form">
+      <div class="form-title">Coordonnées de la carte</div>
+      <div class="field-group">
+        <div class="field">
+          <label for="cardNumber">Numéro de carte <span style="color:rgba(184,196,214,0.35);font-size:0.58rem;text-transform:none">(Champ 2 · PAN · ISO 7812)</span></label>
+          <input type="text" id="cardNumber" inputmode="numeric" maxlength="19" placeholder="0000  0000  0000  0000" autocomplete="cc-number" />
+          <div class="field-error" id="errCardNumber">Numéro invalide — algorithme de Luhn échoué (ISO/IEC 7812)</div>
+        </div>
+        <div class="field">
+          <label for="cardHolder">Nom du titulaire <span style="color:rgba(184,196,214,0.35);font-size:0.58rem;text-transform:none">(Champ 35 · Track 2 equiv.)</span></label>
+          <input type="text" id="cardHolder" maxlength="26" placeholder="PRÉNOM NOM" autocomplete="cc-name" style="text-transform:uppercase;letter-spacing:0.1em" />
+          <div class="field-error" id="errCardHolder">Veuillez saisir votre nom</div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="expiry">Expiration <span style="color:rgba(184,196,214,0.35);font-size:0.58rem;text-transform:none">(Champ 14 · AAMM)</span></label>
+            <input type="text" id="expiry" inputmode="numeric" maxlength="5" placeholder="MM/AA" autocomplete="cc-exp" />
+            <div class="field-error" id="errExpiry">Date invalide</div>
+          </div>
+          <div class="field cvv-field">
+            <label for="cvv">CVV <span style="color:rgba(184,196,214,0.35);font-size:0.58rem;text-transform:none">(Champ 44)</span></label>
+            <input type="password" id="cvv" inputmode="numeric" maxlength="3" placeholder="•••" autocomplete="cc-csc" />
+            <span class="cvv-icon" id="cvvToggle">👁</span>
+            <div class="field-error" id="errCvv">CVV invalide</div>
+          </div>
+        </div>
+        <div class="separator"></div>
+        <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">
+          <span class="btn-text">Payer 89,00 €</span>
+          <div class="btn-spinner"></div>
+        </button>
+      </div>
+    </div>
+
+    <div class="security-row">
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        TLS 1.3
+      </div>
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        3D Secure v2
+      </div>
+      <div class="badge">
+        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        PCI-DSS L1
+      </div>
+    </div>
+
+    <div class="iso-strip">
+      <span class="iso-tag">ISO 8583</span>
+      <span class="iso-tag">ISO 7812</span>
+      <span class="iso-tag">ISO 7813</span>
+      <span class="iso-tag">ISO 9564</span>
+      <span class="iso-tag">ISO 4217</span>
+      <span class="iso-tag">EMV 4.3</span>
+      <span class="iso-tag">CBAE 4.12</span>
+      <span class="iso-tag">DSP2</span>
+    </div>
+
+  </div>
+
+  <!-- ═══ RIGHT PANEL ═══ -->
+  <div class="right-panel">
+
+    <div class="panel-card">
+      <div class="panel-title">Champs de données CBAE</div>
+      <div class="field-map">
+        <div class="fmap-row"><span class="fmap-id">Ch. 2</span><span class="fmap-name">PAN — Numéro porteur</span><span class="fmap-val" id="live-pan">—</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 3</span><span class="fmap-name">Code traitement</span><span class="fmap-val live">00 00 00</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 4</span><span class="fmap-name">Montant transaction</span><span class="fmap-val live">000000008900</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 14</span><span class="fmap-name">Date expiration (AAMM)</span><span class="fmap-val" id="live-exp">—</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 22</span><span class="fmap-name">Code saisie POS entry</span><span class="fmap-val live">010</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 35</span><span class="fmap-name">Données piste 2 (Track 2)</span><span class="fmap-val" id="live-track2">—</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 41</span><span class="fmap-name">Terminal ID (TID)</span><span class="fmap-val live">TRM08842</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 42</span><span class="fmap-name">Merchant ID</span><span class="fmap-val live">MERCH-FR-0042</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 49</span><span class="fmap-name">Code devise ISO 4217</span><span class="fmap-val live">978 (EUR)</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 52</span><span class="fmap-name">PIN chiffré (optionnel)</span><span class="fmap-val">n/a</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 55</span><span class="fmap-name">Données EMV microcircuit</span><span class="fmap-val live">TLV…</span></div>
+        <div class="fmap-row"><span class="fmap-id">Ch. 39</span><span class="fmap-name">Code réponse (response code)</span><span class="fmap-val" id="live-rc">—</span></div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Codes réponse — Champ 39</div>
+      <div class="rc-table">
+        <div class="rc-row"><span class="rc-code ok">00</span><span class="rc-desc">Approuvé — transaction acceptée</span></div>
+        <div class="rc-row"><span class="rc-code err">05</span><span class="rc-desc">Ne pas honorer</span></div>
+        <div class="rc-row"><span class="rc-code err">14</span><span class="rc-desc">Numéro de carte invalide</span></div>
+        <div class="rc-row"><span class="rc-code err">51</span><span class="rc-desc">Provision insuffisante</span></div>
+        <div class="rc-row"><span class="rc-code err">54</span><span class="rc-desc">Carte expirée</span></div>
+        <div class="rc-row"><span class="rc-code ref">91</span><span class="rc-desc">Émetteur injoignable</span></div>
+        <div class="rc-row"><span class="rc-code ref">96</span><span class="rc-desc">Mauvais fonctionnement système</span></div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Conformité &amp; Sécurité</div>
+      <div class="compliance-list">
+        <div class="comp-item">
+          <div class="comp-icon green"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="comp-text"><div class="comp-title">PCI-DSS Niveau 1</div><div class="comp-sub">AES-256 · Tokenisation · HSM</div></div>
+          <span class="comp-check">✓</span>
+        </div>
+        <div class="comp-item">
+          <div class="comp-icon blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="comp-text"><div class="comp-title">3D Secure v2.2</div><div class="comp-sub">Authentification forte · DSP2</div></div>
+          <span class="comp-check">✓</span>
+        </div>
+        <div class="comp-item">
+          <div class="comp-icon gold"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <div class="comp-text"><div class="comp-title">GIE Cartes Bancaires CB</div><div class="comp-sub">CBAE v4.12 · Janvier 2018</div></div>
+          <span class="comp-check">✓</span>
+        </div>
+        <div class="comp-item">
+          <div class="comp-icon green"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <div class="comp-text"><div class="comp-title">Luhn (ISO/IEC 7812)</div><div class="comp-sub">Vérification PAN en temps réel</div></div>
+          <span class="comp-check" id="luhnCheck">—</span>
+        </div>
+        <div class="comp-item">
+          <div class="comp-icon blue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+          <div class="comp-text"><div class="comp-title">EMV Chip &amp; PIN</div><div class="comp-sub">ISO 7816 · TLV Ch.55 · Microcircuit</div></div>
+          <span class="comp-check">✓</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Success overlay ── -->
+<div class="success-overlay" id="successOverlay">
+  <div class="success-card">
+    <div class="success-circle">
+      <svg viewBox="0 0 40 40" class="checkmark"><path d="M8 20 L17 29 L32 12"/></svg>
+    </div>
+    <div class="success-title">Paiement accepté</div>
+    <div class="success-sub">Transaction traitée via le réseau <strong>Cartes Bancaires CB</strong> — Code réponse <strong>00</strong></div>
+    <div class="success-ref" id="authRef">Réf. autorisation: —</div>
+    <div class="success-fields">
+      <div class="sf-item"><div class="sf-key">ITM RÉPONSE</div><div class="sf-val">0110</div></div>
+      <div class="sf-item"><div class="sf-key">CODE RÉPONSE</div><div class="sf-val" style="color:#2ecc8a">00 · Approuvé</div></div>
+      <div class="sf-item"><div class="sf-key">PROTOCOLE</div><div class="sf-val">CBAE 4.12</div></div>
+      <div class="sf-item"><div class="sf-key">MONTANT</div><div class="sf-val">89,00 EUR</div></div>
+      <div class="sf-item"><div class="sf-key">DEVISE ISO 4217</div><div class="sf-val">978 (EUR)</div></div>
+      <div class="sf-item"><div class="sf-key">HORODATAGE</div><div class="sf-val" id="successTs">—</div></div>
+    </div>
+    <div style="font-size:0.62rem;color:rgba(184,196,214,0.3);font-family:'DM Mono',monospace;">ISO 8583 · Champ 38 · GIE Cartes Bancaires · CBAE 4.12</div>
+    <div style="font-size:0.6rem;color:rgba(184,196,214,0.2);">Cliquez pour fermer</div>
+  </div>
+</div>
+
+<script>
+  // ── Build bitmap ──
+  const FIELDS = {2:'PAN',3:'Traitement',4:'Montant',11:'STAN',14:'Expiration',22:'POS Mode',35:'Track 2',41:'TID',42:'MID',49:'Devise',52:'PIN',55:'EMV',64:'MAC'};
+  const grid = document.getElementById('bitmapGrid');
+  for (let i=1;i<=64;i++) {
+    const el=document.createElement('div');
+    el.className='bbit'; el.id='bit-'+i; el.textContent=i;
+    el.title=FIELDS[i]?'Champ '+i+': '+FIELDS[i]:'Champ '+i;
+    grid.appendChild(el);
+  }
+  [3,4,11,22,41,42,49,55,64].forEach(b=>setBit(b,true));
+
+  function setBit(n,on){ const el=document.getElementById('bit-'+n); if(el)el.classList.toggle('on',on); updateBits(); }
+  function updateBits(){ document.getElementById('activeBits').textContent=document.querySelectorAll('.bbit.on').length; }
+  updateBits();
+
+  // ── Flow steps ──
+  function setFlow(step){
+    for(let i=0;i<5;i++){
+      const d=document.getElementById('fd'+i),l=document.getElementById('fl'+i),m=document.getElementById('fm'+i);
+      if(i<step){ d.classList.add('done');d.classList.remove('active');d.textContent='✓';l.className='flow-label done';m.className='flow-msg done'; }
+      else if(i===step){ d.classList.add('active');d.classList.remove('done');d.textContent=i+1;l.className='flow-label active';m.className='flow-msg active'; }
+      else { d.className='flow-dot';d.textContent=i+1;l.className='flow-label';m.className='flow-msg'; }
+    }
+  }
+  setFlow(0);
+
+  // ── ITM ──
+  const ITM_MAP={'—':'En attente de saisie','0100':'Demande autorisation paiement','0110':'Réponse — Transaction approuvée','0120':'Avis final acquéreur'};
+  function setITM(v){ document.getElementById('itmValue').textContent=v; document.getElementById('itmDesc').textContent=ITM_MAP[v]||''; }
+
+  // ── Card number ──
+  const cardIn=document.getElementById('cardNumber'), cardDisp=document.getElementById('cardNumberDisplay');
+  cardIn.addEventListener('input',e=>{
+    let v=e.target.value.replace(/\D/g,'').substring(0,16);
+    e.target.value=v.replace(/(.{4})/g,'$1  ').trim();
+    if(v.length>0){
+      const m=v.padEnd(16,'•'); cardDisp.textContent=(m.substring(0,12).replace(/\d/g,'•')+m.substring(12)).replace(/(.{4})/g,'$1 ').trim();
+      setBit(2,true); document.getElementById('live-pan').textContent='…'+v.slice(-4).padStart(4,'•'); document.getElementById('live-pan').classList.add('live');
+    } else { cardDisp.textContent='•••• •••• •••• ••••'; setBit(2,false); document.getElementById('live-pan').textContent='—'; document.getElementById('live-pan').classList.remove('live'); }
+    if(v.length===16){ const ok=luhn(v); const el=document.getElementById('luhnCheck'); el.textContent=ok?'✓':'✗'; el.style.color=ok?'var(--cb-success)':'var(--cb-error)'; } else { document.getElementById('luhnCheck').textContent='—'; document.getElementById('luhnCheck').style.color=''; }
+    if(v.length>=8){ document.getElementById('live-track2').textContent=v.substring(0,6)+'…D'; document.getElementById('live-track2').classList.add('live'); setBit(35,true); } else { document.getElementById('live-track2').textContent='—'; document.getElementById('live-track2').classList.remove('live'); setBit(35,false); }
+    setITM(v.length===16?'0100':'—');
+  });
+
+  // ── Holder ──
+  document.getElementById('cardHolder').addEventListener('input',e=>{ document.getElementById('cardHolderDisplay').textContent=e.target.value.toUpperCase()||'PRÉNOM NOM'; });
+
+  // ── Expiry ──
+  const expIn=document.getElementById('expiry'),expDisp=document.getElementById('cardExpiryDisplay');
+  expIn.addEventListener('input',e=>{
+    let v=e.target.value.replace(/\D/g,'').substring(0,4);
+    if(v.length>=2) v=v.substring(0,2)+'/'+v.substring(2);
+    e.target.value=v; expDisp.textContent=v||'MM/AA';
+    const el=document.getElementById('live-exp');
+    if(v.length===5){ const[mm,yy]=v.split('/'); el.textContent=yy+mm; el.classList.add('live'); setBit(14,true); }
+    else { el.textContent='—'; el.classList.remove('live'); setBit(14,false); }
+  });
+
+  // ── CVV ──
+  const cvvIn=document.getElementById('cvv'),cvvDisp=document.getElementById('cvvDisplay'),card=document.getElementById('card');
+  cvvIn.addEventListener('focus',()=>card.classList.add('flipped'));
+  cvvIn.addEventListener('blur', ()=>card.classList.remove('flipped'));
+  cvvIn.addEventListener('input',e=>{ let v=e.target.value.replace(/\D/g,'').substring(0,3); e.target.value=v; cvvDisp.textContent=v.length?'•'.repeat(v.length).padEnd(3,'•'):'•••'; });
+  let cvvVis=false;
+  document.getElementById('cvvToggle').addEventListener('click',()=>{ cvvVis=!cvvVis; cvvIn.type=cvvVis?'text':'password'; document.getElementById('cvvToggle').textContent=cvvVis?'🙈':'👁'; });
+
+  // ── Luhn ──
+  function luhn(n){ let s=0,alt=false; for(let i=n.length-1;i>=0;i--){ let d=parseInt(n[i]); if(alt){d*=2;if(d>9)d-=9;} s+=d;alt=!alt; } return s%10===0; }
+
+  // ── Validate ──
+  function validate(){
+    let ok=true;
+    const num=cardIn.value.replace(/\D/g,'');
+    const eNum=document.getElementById('errCardNumber');
+    if(num.length<16||!luhn(num)){ cardIn.classList.add('error');eNum.classList.add('visible');ok=false; } else { cardIn.classList.remove('error');eNum.classList.remove('visible'); }
+    const h=document.getElementById('cardHolder').value.trim();
+    const eH=document.getElementById('errCardHolder');
+    if(h.length<2){ document.getElementById('cardHolder').classList.add('error');eH.classList.add('visible');ok=false; } else { document.getElementById('cardHolder').classList.remove('error');eH.classList.remove('visible'); }
+    const exp=expIn.value; const[mm,yy]=(exp||'/').split('/');
+    const eE=document.getElementById('errExpiry');
+    if(!mm||!yy||parseInt(mm)<1||parseInt(mm)>12||new Date(2000+parseInt(yy||0),parseInt(mm||0)-1)<new Date()){ expIn.classList.add('error');eE.classList.add('visible');ok=false; } else { expIn.classList.remove('error');eE.classList.remove('visible'); }
+    const cvv=cvvIn.value; const eC=document.getElementById('errCvv');
+    if(cvv.length<3){ cvvIn.classList.add('error');eC.classList.add('visible');ok=false; } else { cvvIn.classList.remove('error');eC.classList.remove('visible'); }
+    return ok;
+  }
+
+  // ── Submit ──
+  function handleSubmit(){
+    if(!validate()) return;
+    document.getElementById('submitBtn').classList.add('loading');
+    setFlow(1); setITM('0100');
+    setTimeout(()=>setFlow(2),600);
+    setTimeout(()=>{ setFlow(3); setITM('0110'); },1400);
+    setTimeout(()=>{ setFlow(4); setITM('0120'); },1900);
+    setTimeout(()=>{
+      document.getElementById('submitBtn').classList.remove('loading');
+      document.getElementById('live-rc').textContent='00'; document.getElementById('live-rc').classList.add('live');
+      const ref=Array.from({length:6},()=>Math.floor(Math.random()*10)).join('');
+      document.getElementById('authRef').textContent='Réf. autorisation: '+ref+' CB';
+      document.getElementById('successTs').textContent=new Date().toISOString().replace('T',' ').substring(0,19);
+      document.getElementById('successOverlay').classList.add('visible');
+    },2300);
+  }
+  document.getElementById('successOverlay').addEventListener('click',function(){ this.classList.remove('visible'); });
+</script>
+</body>
+</html>
